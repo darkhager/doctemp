@@ -1,0 +1,21 @@
+# Python
+backend/venv/
+__pycache__/
+*.py[cod]
+.env
+
+# Database & runtime data (local, regenerated)
+backend/data/
+backend/uploads/
+backend/exports/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
