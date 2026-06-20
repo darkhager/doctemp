@@ -1,0 +1,9 @@
+/* Placeholder text for empty contentEditable section boxes */
+.dts-editable {
+  outline: none;
+}
+.dts-editable:empty::before {
+  content: attr(data-placeholder);
+  color: #cbd5e1;
+  pointer-events: none;
+}

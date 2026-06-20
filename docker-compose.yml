@@ -1,0 +1,20 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./exports:/app/exports
+    environment:
+      DATABASE_URL: sqlite:///./data/templates.sqlite
+      UPLOAD_DIR: uploads
+      EXPORT_DIR: exports
+      STATIC_DIR: static
+      ALLOWED_ORIGINS: http://localhost:8000
+    restart: unless-stopped
