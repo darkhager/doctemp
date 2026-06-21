@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { templatesApi, categoriesApi } from '../../api/client'
+import { useToast } from '../ui/Toast'
+import { ago } from '../../utils'
 import type { Template } from '../../types'
 
 export default function TemplateLibrary() {
@@ -12,6 +14,7 @@ export default function TemplateLibrary() {
   const [importing, setImporting] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const nav = useNavigate()
+  const { toast } = useToast()
 
   const load = async () => {
     setLoading(true)
@@ -27,13 +30,14 @@ export default function TemplateLibrary() {
   useEffect(() => { load() }, [search, category])
 
   const handleDelete = async (id: number, name: string) => {
-    if (!confirm(`Delete "${name}"?`)) return
     await templatesApi.delete(id)
+    toast(`"${name}" deleted`)
     load()
   }
 
-  const handleDuplicate = async (id: number) => {
+  const handleDuplicate = async (id: number, name: string) => {
     await templatesApi.duplicate(id)
+    toast(`"${name}" duplicated`)
     load()
   }
 
@@ -43,10 +47,10 @@ export default function TemplateLibrary() {
     setImporting(true)
     try {
       const result = await templatesApi.importDocx(file)
-      alert(`Imported "${result.name}". ${result.message}`)
+      toast(`Imported "${result.name}"`)
       load()
     } catch {
-      alert('Import failed. Make sure the file is a valid .docx')
+      toast('Import failed — make sure the file is a valid .docx', 'error')
     } finally {
       setImporting(false)
       if (fileRef.current) fileRef.current.value = ''
@@ -59,10 +63,10 @@ export default function TemplateLibrary() {
         <h1 style={{ margin: 0, fontSize: 24, fontWeight: 700 }}>Template Library</h1>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={() => fileRef.current?.click()} disabled={importing}
-            style={btnStyle('#0ea5e9')}>
+            className="btn btn-md btn-sky">
             {importing ? 'Importing…' : 'Import .docx'}
           </button>
-          <button onClick={() => nav('/templates/new')} style={btnStyle('#10b981')}>
+          <button onClick={() => nav('/templates/new')} className="btn btn-md btn-success">
             + New Template
           </button>
         </div>
@@ -74,30 +78,42 @@ export default function TemplateLibrary() {
           placeholder="Search templates…"
           value={search}
           onChange={e => setSearch(e.target.value)}
-          style={inputStyle}
+          className="input"
+          style={{ flex: 1 }}
         />
-        <select value={category} onChange={e => setCategory(e.target.value)} style={inputStyle}>
+        <select value={category} onChange={e => setCategory(e.target.value)}
+          className="input" style={{ flex: '0 0 180px' }}>
           <option value="">All categories</option>
           {categories.map(c => <option key={c} value={c}>{c}</option>)}
         </select>
       </div>
 
       {loading ? (
-        <p style={{ color: '#64748b' }}>Loading…</p>
+        <div className="card-grid">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="card" style={{ height: 160 }}>
+              <div className="skeleton" style={{ height: '100%', borderRadius: 8 }} />
+            </div>
+          ))}
+        </div>
       ) : templates.length === 0 ? (
-        <div style={emptyState}>
+        <div className="empty-state">
           <p style={{ fontSize: 16, color: '#64748b' }}>No templates yet.</p>
           <p style={{ color: '#94a3b8', fontSize: 14 }}>Create one from scratch or import a .docx file.</p>
+          <div style={{ marginTop: 16, display: 'flex', gap: 10, justifyContent: 'center' }}>
+            <button onClick={() => nav('/templates/new')} className="btn btn-md btn-success">+ New Template</button>
+            <button onClick={() => fileRef.current?.click()} className="btn btn-md btn-sky">Import .docx</button>
+          </div>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+        <div className="card-grid">
           {templates.map(t => (
             <TemplateCard
               key={t.id}
               template={t}
               onEdit={() => nav(`/templates/${t.id}/edit`)}
               onCreateDoc={() => nav(`/documents/new?template=${t.id}`)}
-              onDuplicate={() => handleDuplicate(t.id)}
+              onDuplicate={() => handleDuplicate(t.id, t.name)}
               onDelete={() => handleDelete(t.id, t.name)}
             />
           ))}
@@ -114,47 +130,30 @@ function TemplateCard({ template: t, onEdit, onCreateDoc, onDuplicate, onDelete 
   onDuplicate: () => void
   onDelete: () => void
 }) {
+  const [confirming, setConfirming] = useState(false)
+
   return (
-    <div style={card}>
+    <div className="card">
       <div style={{ marginBottom: 8 }}>
-        <span style={badge}>{t.category}</span>
+        <span className="badge">{t.category}</span>
       </div>
       <h3 style={{ margin: '0 0 6px', fontSize: 16, fontWeight: 600 }}>{t.name}</h3>
       {t.description && <p style={{ margin: '0 0 10px', fontSize: 13, color: '#64748b' }}>{t.description}</p>}
-      <p style={{ margin: '0 0 14px', fontSize: 12, color: '#94a3b8' }}>
-        {new Date(t.updated_at).toLocaleDateString()}
-      </p>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <button onClick={onCreateDoc} style={btnStyle('#10b981', true)}>Create Document</button>
-        <button onClick={onEdit} style={btnStyle('#3b82f6', true)}>Edit Template</button>
-        <button onClick={onDuplicate} style={btnStyle('#8b5cf6', true)}>Copy</button>
-        <button onClick={onDelete} style={btnStyle('#ef4444', true)}>Delete</button>
+      <p style={{ margin: '0 0 14px', fontSize: 12, color: '#94a3b8' }}>Updated {ago(t.updated_at)}</p>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <button onClick={onCreateDoc} className="btn btn-sm btn-success">Create Doc</button>
+        <button onClick={onEdit} className="btn btn-sm btn-primary">Edit</button>
+        <button onClick={onDuplicate} className="btn btn-sm btn-purple">Copy</button>
+        {confirming ? (
+          <>
+            <span style={{ fontSize: 12, color: '#64748b' }}>Delete?</span>
+            <button onClick={() => { setConfirming(false); onDelete() }} className="btn btn-sm btn-danger">Yes</button>
+            <button onClick={() => setConfirming(false)} className="btn btn-sm btn-ghost">No</button>
+          </>
+        ) : (
+          <button onClick={() => setConfirming(true)} className="btn btn-sm btn-danger">Delete</button>
+        )}
       </div>
     </div>
   )
-}
-
-const card: React.CSSProperties = {
-  background: '#fff', borderRadius: 10, padding: 18,
-  boxShadow: '0 1px 4px rgba(0,0,0,.08)', border: '1px solid #e2e8f0',
-}
-const badge: React.CSSProperties = {
-  background: '#f1f5f9', color: '#475569', padding: '2px 8px',
-  borderRadius: 4, fontSize: 11, fontWeight: 600, textTransform: 'uppercase',
-}
-const emptyState: React.CSSProperties = {
-  textAlign: 'center', padding: '60px 0',
-  background: '#fff', borderRadius: 12, border: '2px dashed #e2e8f0',
-}
-const inputStyle: React.CSSProperties = {
-  padding: '8px 12px', borderRadius: 6, border: '1px solid #cbd5e1',
-  fontSize: 14, flex: 1, outline: 'none',
-}
-
-function btnStyle(color: string, small = false): React.CSSProperties {
-  return {
-    background: color, color: '#fff', border: 'none',
-    padding: small ? '6px 12px' : '9px 18px',
-    borderRadius: 6, cursor: 'pointer', fontSize: small ? 12 : 14, fontWeight: 500,
-  }
 }

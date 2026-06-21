@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { templatesApi } from '../../api/client'
+import { useToast } from '../ui/Toast'
 import type { Template, ExportFormat } from '../../types'
 import Preview from '../Preview/Preview'
 
 export default function FillFormPage() {
   const { id } = useParams<{ id: string }>()
   const nav = useNavigate()
+  const { toast } = useToast()
   const [template, setTemplate] = useState<Template | null>(null)
   const [values, setValues] = useState<Record<string, string>>({})
   const [exporting, setExporting] = useState(false)
@@ -28,8 +30,9 @@ export default function FillFormPage() {
     setExporting(true)
     try {
       await templatesApi.export(Number(id), fmt, values)
+      toast(`Exported as .${fmt}`)
     } catch {
-      alert('Export failed.')
+      toast('Export failed.', 'error')
     } finally {
       setExporting(false)
     }
@@ -42,19 +45,17 @@ export default function FillFormPage() {
   return (
     <div>
       <div style={{ display: 'flex', gap: 16, alignItems: 'center', marginBottom: 24 }}>
-        <button onClick={() => nav('/templates')} style={backBtn}>← Back</button>
+        <button onClick={() => nav('/templates')} className="btn btn-md btn-ghost">← Back</button>
         <div style={{ flex: 1 }}>
           <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>{template.name}</h2>
           {template.description && (
             <p style={{ margin: '2px 0 0', fontSize: 13, color: '#64748b' }}>{template.description}</p>
           )}
         </div>
-        <button onClick={() => handleExport('docx')} disabled={exporting}
-          style={{ ...exportBtn, background: '#3b82f6' }}>
+        <button onClick={() => handleExport('docx')} disabled={exporting} className="btn btn-md btn-primary">
           {exporting ? '…' : 'Export .docx'}
         </button>
-        <button onClick={() => handleExport('pdf')} disabled={exporting}
-          style={{ ...exportBtn, background: '#8b5cf6' }}>
+        <button onClick={() => handleExport('pdf')} disabled={exporting} className="btn btn-md btn-purple">
           {exporting ? '…' : 'Export .pdf'}
         </button>
       </div>
@@ -89,7 +90,8 @@ export default function FillFormPage() {
                     value={values[f.name] || ''}
                     onChange={e => setValues(v => ({ ...v, [f.name]: e.target.value }))}
                     rows={4}
-                    style={{ ...fieldInput, resize: 'vertical' }}
+                    className="input"
+                    style={{ resize: 'vertical' }}
                   />
                 ) : (
                   <input
@@ -97,10 +99,9 @@ export default function FillFormPage() {
                     value={values[f.name] || ''}
                     onChange={e => setValues(v => ({ ...v, [f.name]: e.target.value }))}
                     placeholder={f.default_value || `Enter ${f.label.toLowerCase()}…`}
-                    style={fieldInput}
+                    className="input"
                   />
                 )}
-                <code style={{ fontSize: 11, color: '#94a3b8' }}>{`{{${f.name}}}`}</code>
               </div>
             ))
           )}
@@ -118,17 +119,4 @@ function fillHtml(html: string, values: Record<string, string>): string {
       ? `<span style="background:#fef9c3;border-radius:2px;padding:0 2px">${values[name] || `{{${name}}}`}</span>`
       : `<span style="background:#fee2e2;color:#991b1b;border-radius:2px;padding:0 2px">{{${name}}}</span>`
   )
-}
-
-const backBtn: React.CSSProperties = {
-  background: 'none', border: '1px solid #cbd5e1', borderRadius: 6,
-  padding: '7px 14px', cursor: 'pointer', fontSize: 14, color: '#475569',
-}
-const exportBtn: React.CSSProperties = {
-  color: '#fff', border: 'none', borderRadius: 6, padding: '8px 16px',
-  cursor: 'pointer', fontSize: 14, fontWeight: 600,
-}
-const fieldInput: React.CSSProperties = {
-  width: '100%', padding: '9px 12px', border: '1px solid #cbd5e1',
-  borderRadius: 6, fontSize: 14, boxSizing: 'border-box',
 }

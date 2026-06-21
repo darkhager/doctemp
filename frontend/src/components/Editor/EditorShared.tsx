@@ -178,19 +178,11 @@ export function ComponentLibrary() {
 export function CreatePageBar({ onCreate }: { onCreate: (bodyN: number) => void }) {
   return (
     <div style={{ borderTop: '1px dashed #cbd5e1', marginTop: 8, paddingTop: 20, textAlign: 'center' }}>
-      <p style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', margin: '0 0 4px' }}>+ Create New Page</p>
-      <p style={{ fontSize: 12, color: '#94a3b8', margin: '0 0 14px' }}>
-        Choose a layout — a new page is appended after the last page
-      </p>
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-        {[1, 2, 3, 4, 5].map(n => (
-          <button key={n} onClick={() => onCreate(n)}
-            style={{ padding: '8px 14px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#fff',
-              cursor: 'pointer', fontSize: 13, color: '#334155', fontWeight: 500 }}>
-            {n} Section{n > 1 ? 's' : ''}
-          </button>
-        ))}
-      </div>
+      <button onClick={() => onCreate(1)}
+        style={{ padding: '10px 24px', borderRadius: 6, border: '1px solid #cbd5e1', background: '#fff',
+          cursor: 'pointer', fontSize: 14, color: '#334155', fontWeight: 600 }}>
+        + Create New Page
+      </button>
     </div>
   )
 }

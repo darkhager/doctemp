@@ -6,7 +6,7 @@ export type Orientation = 'portrait' | 'landscape'
 export interface Sec  { id: string; type: SecType; label: string; content: string }
 export interface Page { id: string; orientation: Orientation; sections: Sec[] }
 
-export const MAX_BODY = 5
+export const MAX_BODY = 6
 export const MIN_BODY = 1
 
 export const uid = () => Math.random().toString(36).slice(2, 10)

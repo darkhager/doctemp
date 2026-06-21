@@ -45,7 +45,7 @@ def test_create_and_list_template():
 
 
 def test_update_template():
-    r = client.post("/api/templates/", json={"name": "Letter"})
+    r = client.post("/api/templates/", json={"name": "Letter", "content_html": "<p>Hello</p>"})
     tid = r.json()["id"]
     r2 = client.put(f"/api/templates/{tid}", json={"name": "Updated Letter"})
     assert r2.status_code == 200
@@ -53,7 +53,7 @@ def test_update_template():
 
 
 def test_delete_template():
-    r = client.post("/api/templates/", json={"name": "Temp"})
+    r = client.post("/api/templates/", json={"name": "Temp", "content_html": "<p>Hello</p>"})
     tid = r.json()["id"]
     r2 = client.delete(f"/api/templates/{tid}")
     assert r2.status_code == 204
@@ -76,7 +76,7 @@ def test_fill_template():
 
 
 def test_duplicate_template():
-    r = client.post("/api/templates/", json={"name": "Base"})
+    r = client.post("/api/templates/", json={"name": "Base", "content_html": "<p>Hello</p>"})
     tid = r.json()["id"]
     r2 = client.post(f"/api/templates/{tid}/duplicate")
     assert r2.status_code == 201

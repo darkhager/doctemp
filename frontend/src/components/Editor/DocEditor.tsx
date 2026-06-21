@@ -14,7 +14,6 @@ export interface DocEditorProps {
   onSave: (name: string, html: string) => Promise<void>
 }
 
-type View = 'pages' | 'toc' | 'panels'
 type SaveStatus = 'saved' | 'dirty' | 'saving' | 'error'
 
 const PX_PER_MM = 96 / 25.4   // CSS px per millimetre at 96dpi
@@ -32,15 +31,13 @@ const s: Record<string, React.CSSProperties> = {
   autosave:   { marginLeft: 'auto', display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, padding: '5px 14px', borderRadius: 4 },
   badge:      { fontSize: 11, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 4 },
   body:       { display: 'flex', flex: 1, overflow: 'hidden' },
-  leftPanel:  { width: 200, borderRight: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' },
-  leftTabs:   { display: 'flex', flexDirection: 'column', gap: 4, padding: '8px 8px', borderBottom: '1px solid #e2e8f0' },
-  tabRow:     { display: 'flex', alignItems: 'center', gap: 4 },
-  tab:        { flex: 1, padding: '5px 6px', borderRadius: 4, border: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 600 },
-  gear:       { padding: '5px 8px', borderRadius: 4, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: 13 },
-  popover:    { position: 'absolute', top: 44, right: 8, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,.1)', zIndex: 150, minWidth: 150 },
+  leftPanel:  { width: 260, borderRight: '1px solid #e2e8f0', background: '#f8fafc', display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' },
+  secHead:    { display: 'flex', alignItems: 'center', gap: 6, padding: '7px 10px', background: '#f1f5f9', borderBottom: '1px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' as const, flexShrink: 0 },
+  secTitle:   { flex: 1, fontSize: 11, fontWeight: 700, color: '#475569', textTransform: 'uppercase' as const, letterSpacing: '0.5px' },
+  gear:       { padding: '3px 7px', borderRadius: 4, border: '1px solid #e2e8f0', background: '#fff', cursor: 'pointer', fontSize: 12 },
+  popover:    { position: 'absolute', top: 36, right: 8, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,.1)', zIndex: 150, minWidth: 150 },
   popItem:    { display: 'block', width: '100%', textAlign: 'left', padding: '8px 14px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#334155' },
-  leftScroll: { flex: 1, overflowY: 'auto', padding: '10px 8px' },
-  hint:       { padding: '6px 10px 12px', fontSize: 10, color: '#94a3b8', lineHeight: 1.7, whiteSpace: 'pre-line' },
+  leftScroll: { overflowY: 'auto', padding: '8px 8px' },
   rightPanel: { flex: 1, overflow: 'auto', padding: '28px 24px', background: '#e5e7eb' },
   pageLabel:  { display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, color: '#64748b', marginBottom: 6, fontWeight: 600 },
   sheet:      { background: '#fff', padding: '20mm', borderRadius: 2, border: '1px solid #e2e8f0', boxShadow: '0 1px 8px rgba(0,0,0,.12)', boxSizing: 'border-box', display: 'flex', flexDirection: 'column', gap: '5mm' },
@@ -52,10 +49,17 @@ const s: Record<string, React.CSSProperties> = {
 
 export default function DocEditor({ initialName, initialPages, saveLabel, saveColor, badge, onSave }: DocEditorProps) {
   const [docName, setDocName]       = useState(initialName)
-  const [pages, setPages]           = useState<Page[]>(initialPages)
-  const [selectedPageId, setSelectedPageId] = useState<string | null>(initialPages[0]?.id ?? null)
+  const startPages = initialPages.length > 0 ? initialPages : [mkPage(1)]
+  const [pages, setPages]           = useState<Page[]>(startPages)
+  const [selectedPageId, setSelectedPageId] = useState<string | null>(startPages[0]?.id ?? null)
   const [selectedSecId, setSelectedSecId]   = useState<string | null>(null)
-  const [view, setView]             = useState<View>('pages')
+  const [overviewOpen, setOverviewOpen] = useState(true)
+  const [formatOpen, setFormatOpen]     = useState(true)
+  const [layoutOpen, setLayoutOpen]     = useState(true)
+  const [panelsOpen, setPanelsOpen] = useState(true)
+  const [viewMode, setViewMode]     = useState<'scroll' | 'paged'>('scroll')
+  const [pagesPerView, setPagesPerView] = useState<1 | 2 | 3>(1)
+  const [zoomScale, setZoomScale]   = useState(0.75)
   const [collapsed, setCollapsed]   = useState<Set<string>>(new Set())
   const [status, setStatus]         = useState<SaveStatus>('saved')
   const [gearOpen, setGearOpen]     = useState(false)
@@ -153,13 +157,22 @@ export default function DocEditor({ initialName, initialPages, saveLabel, saveCo
       : { ...p, sections: p.sections.map(sec => sec.id !== secId ? sec : { ...sec, content }) }), true)
   }
 
-  function addSection() {
+  // Set the selected page to exactly n body sections, then jump to section n.
+  // Growing appends blank sections; shrinking drops trailing ones (recoverable via Undo).
+  function setSectionCount(n: number) {
     const page = pages.find(p => p.id === selectedPageId)
-    if (!page || bodyCount(page) >= MAX_BODY) return
-    const footerIdx = page.sections.findIndex(sec => sec.type === 'footer')
-    const secs = [...page.sections]
-    secs.splice(footerIdx >= 0 ? footerIdx : secs.length, 0, mkSec('body', 'Section'))
-    commitStruct(pages.map(p => p.id !== selectedPageId ? p : { ...p, sections: secs }))
+    if (!page) return
+    const bodies = page.sections.filter(sec => sec.type === 'body')
+    const nextBodies = n > bodies.length
+      ? [...bodies, ...Array.from({ length: n - bodies.length }, () => mkSec('body', 'Section'))]
+      : bodies.slice(0, n)
+    if (n !== bodies.length) {
+      const header = page.sections.filter(sec => sec.type === 'header')
+      const footer = page.sections.filter(sec => sec.type === 'footer')
+      commitStruct(pages.map(p => p.id !== page.id ? p : { ...p, sections: [...header, ...nextBodies, ...footer] }))
+    }
+    const target = nextBodies[n - 1]
+    if (target) { setSelectedSecId(target.id); setScrollTo({ type: 'sec', id: target.id }) }
   }
 
   // TOC drag: move a body section to another body slot (within or across pages).
@@ -222,7 +235,6 @@ export default function DocEditor({ initialName, initialPages, saveLabel, saveCo
   // ── Render ───────────────────────────────────────────────────────────────────
 
   const selectedPage = pages.find(p => p.id === selectedPageId)
-  const canAddSection = !!selectedPage && bodyCount(selectedPage) < MAX_BODY
 
   // 'saved' uses the editor's theme colour; the rest are semantic (amber/blue/red).
   const AUTOSAVE: Record<SaveStatus, React.CSSProperties> = {
@@ -241,101 +253,224 @@ export default function DocEditor({ initialName, initialPages, saveLabel, saveCo
         {badge && <span style={s.badge}>{badge}</span>}
         <button style={s.btn} onClick={undo}>↶ Undo</button>
         <button style={s.btn} onClick={redo}>↷ Redo</button>
-        <button style={{ ...s.btn, opacity: canAddSection ? 1 : 0.45, cursor: canAddSection ? 'pointer' : 'not-allowed' }}
-          onClick={addSection} disabled={!canAddSection}>+ Add Section</button>
         <span style={s.count}>Pages: {pages.length}</span>
         <span style={{ ...s.autosave, ...AUTOSAVE[status] }} title={saveLabel}>{AUTOSAVE_TEXT[status]}</span>
+        <button style={{ ...s.btn, background: saveColor, color: '#fff', border: 'none', fontWeight: 600 }}
+          onClick={flush} disabled={status === 'saving'}>{saveLabel}</button>
       </div>
 
       <div style={s.body}>
-        {/* Left panel: Pages / TOC tabs */}
+        {/* Left panel: collapsible Overview + Page Format + Page Layout + Components bars */}
         <div style={s.leftPanel}>
-          <div style={s.leftTabs}>
-            <div style={s.tabRow}>
-              <button style={{ ...s.tab, background: view === 'pages' ? '#e0f2fe' : 'transparent', color: view === 'pages' ? '#0369a1' : '#64748b' }}
-                onClick={() => setView('pages')}>🖼 Pages</button>
-              <button style={{ ...s.tab, background: view === 'toc' ? '#e0f2fe' : 'transparent', color: view === 'toc' ? '#0369a1' : '#64748b' }}
-                onClick={() => setView('toc')}>📋 TOC</button>
-            </div>
-            <div style={s.tabRow}>
-              <button style={{ ...s.tab, background: view === 'panels' ? '#e0f2fe' : 'transparent', color: view === 'panels' ? '#0369a1' : '#64748b' }}
-                onClick={() => setView('panels')}>🧩 Panels</button>
-              <button style={s.gear} onClick={e => { e.stopPropagation(); setGearOpen(o => !o) }}>⚙</button>
-            </div>
-          </div>
 
-          {gearOpen && (
-            <div style={s.popover} onClick={e => e.stopPropagation()}>
-              <button style={s.popItem} onClick={() => { setCollapsed(new Set()); setGearOpen(false) }}>Expand all pages</button>
-              <button style={s.popItem} onClick={() => { setCollapsed(new Set(pages.map(p => p.id))); setGearOpen(false) }}>Collapse all pages</button>
+          {/* ── Overview bar (page thumbnails) ────────────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: overviewOpen ? '1 1 0' : '0 0 auto', minHeight: 0, borderBottom: '2px solid #e2e8f0' }}>
+            <div style={s.secHead} onClick={() => setOverviewOpen(o => !o)}>
+              <span style={{ fontSize: 9, color: '#94a3b8' }}>{overviewOpen ? '▼' : '▶'}</span>
+              <span style={s.secTitle}>Overview</span>
             </div>
-          )}
-
-          <div style={s.leftScroll}>
-            {view === 'pages' && pages.map((page, idx) => (
-              <PageThumb key={page.id} page={page} index={idx} selected={selectedPageId === page.id}
-                onClick={() => { setSelectedPageId(page.id); setSelectedSecId(null); setScrollTo({ type: 'page', id: page.id }) }}
-                onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, pageId: page.id }) }}
-                onDragStart={() => { dragPage.current = page.id }}
-                onDrop={() => dropPage(page.id)} />
-            ))}
-            {view === 'toc' && (
-              <TocTree
-                pages={pages}
-                selectedPageId={selectedPageId}
-                selectedSecId={selectedSecId}
-                collapsed={collapsed}
-                onToggle={pid => setCollapsed(c => { const n = new Set(c); n.has(pid) ? n.delete(pid) : n.add(pid); return n })}
-                onSelectPage={pid => { setSelectedPageId(pid); setSelectedSecId(null); setScrollTo({ type: 'page', id: pid }) }}
-                onSelectSection={(pid, sid) => { setSelectedPageId(pid); setSelectedSecId(sid); setScrollTo({ type: 'sec', id: sid }) }}
-                onPageContextMenu={(e, pid) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, pageId: pid }) }}
-                onSectionDragStart={(pid, sid) => { dragSec.current = { pageId: pid, secId: sid } }}
-                onSectionDrop={moveSection}
-              />
+            {overviewOpen && (
+              <div style={{ ...s.leftScroll, flex: 1, overflowY: 'auto' }}>
+                {pages.map((page, idx) => (
+                  <PageThumb key={page.id} page={page} index={idx} selected={selectedPageId === page.id}
+                    onClick={() => { setSelectedPageId(page.id); setSelectedSecId(null); setScrollTo({ type: 'page', id: page.id }) }}
+                    onContextMenu={e => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, pageId: page.id }) }}
+                    onDragStart={() => { dragPage.current = page.id }}
+                    onDrop={() => dropPage(page.id)} />
+                ))}
+              </div>
             )}
-            {view === 'panels' && <ComponentLibrary />}
           </div>
-          <div style={s.hint}>
-            {view === 'pages'  && 'Drag to reorder\nRight click:\n• Duplicate\n• Delete'}
-            {view === 'toc'    && 'Click a section to jump\nDrag sections to reorder\nor move between pages'}
-            {view === 'panels' && 'Drag a component into\na section box'}
-          </div>
-        </div>
 
-        {/* Main canvas — continuous Word-like document: all pages as stacked sheets */}
-        <div ref={panelRef} style={s.rightPanel}>
-          {pages.length === 0 && <p style={s.empty}>No pages yet — create one below to get started.</p>}
-          {pages.map((page, idx) => {
-            const dims = page.orientation === 'landscape'
-              ? { width: '297mm', height: '210mm' }
-              : { width: '210mm', height: '297mm' }
-            // Fit the sheet to the panel width (downscale only); landscape needs more room.
-            const sheetPx = (page.orientation === 'landscape' ? 297 : 210) * PX_PER_MM
-            const zoom = panelW > 0 ? Math.min(1, (panelW - 8) / sheetPx) : 1
-            return (
-              <div key={page.id} style={{ width: dims.width, margin: '0 auto 28px', zoom }}>
-                <div style={s.pageLabel}>
-                  <span>Page {idx + 1} · A4 {page.orientation === 'landscape' ? 'Landscape' : 'Portrait'}</span>
-                  <button style={s.orientBtn}
-                    onClick={() => setPageOrientation(page.id, page.orientation === 'landscape' ? 'portrait' : 'landscape')}>
-                    ⟳ {page.orientation === 'landscape' ? 'Portrait' : 'Landscape'}
-                  </button>
-                </div>
-                <div
-                  id={`page-${page.id}`}
-                  onMouseDown={() => { if (selectedPageId !== page.id) { setSelectedPageId(page.id); setSelectedSecId(null) } }}
-                  style={{ ...s.sheet, ...dims, ...(selectedPageId === page.id ? s.sheetSel : {}) }}
-                >
-                  {page.sections.map(sec => (
-                    <SectionBox key={sec.id} sec={sec} selected={selectedSecId === sec.id}
-                      grow={sec.type === 'body'}
-                      onChange={html => updateSection(page.id, sec.id, html)} />
-                  ))}
+          {/* ── Page Format bar (document outline / TOC) ──────────── */}
+          <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: formatOpen ? '1 1 0' : '0 0 auto', minHeight: 0, borderBottom: '2px solid #e2e8f0' }}>
+            <div style={s.secHead} onClick={() => setFormatOpen(o => !o)}>
+              <span style={{ fontSize: 9, color: '#94a3b8' }}>{formatOpen ? '▼' : '▶'}</span>
+              <span style={s.secTitle}>Page Format</span>
+              {formatOpen && (
+                <button style={s.gear} onClick={e => { e.stopPropagation(); setGearOpen(o => !o) }}>⚙</button>
+              )}
+            </div>
+            {gearOpen && (
+              <div style={s.popover} onClick={e => e.stopPropagation()}>
+                <button style={s.popItem} onClick={() => { setCollapsed(new Set()); setGearOpen(false) }}>Expand all pages</button>
+                <button style={s.popItem} onClick={() => { setCollapsed(new Set(pages.map(p => p.id))); setGearOpen(false) }}>Collapse all pages</button>
+              </div>
+            )}
+            {formatOpen && (
+              <div style={{ ...s.leftScroll, flex: 1, overflowY: 'auto' }}>
+                <TocTree
+                  pages={pages}
+                  selectedPageId={selectedPageId}
+                  selectedSecId={selectedSecId}
+                  collapsed={collapsed}
+                  onToggle={pid => setCollapsed(c => { const n = new Set(c); n.has(pid) ? n.delete(pid) : n.add(pid); return n })}
+                  onSelectPage={pid => { setSelectedPageId(pid); setSelectedSecId(null); setScrollTo({ type: 'page', id: pid }) }}
+                  onSelectSection={(pid, sid) => { setSelectedPageId(pid); setSelectedSecId(sid); setScrollTo({ type: 'sec', id: sid }) }}
+                  onPageContextMenu={(e, pid) => { e.preventDefault(); setCtxMenu({ x: e.clientX, y: e.clientY, pageId: pid }) }}
+                  onSectionDragStart={(pid, sid) => { dragSec.current = { pageId: pid, secId: sid } }}
+                  onSectionDrop={moveSection}
+                />
+              </div>
+            )}
+          </div>
+
+          {/* ── Page Layout section (click a number to set the page's section count) ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: '0 0 auto', minHeight: 0, borderBottom: '2px solid #e2e8f0' }}>
+            <div style={s.secHead} onClick={() => setLayoutOpen(o => !o)}>
+              <span style={{ fontSize: 9, color: '#94a3b8' }}>{layoutOpen ? '▼' : '▶'}</span>
+              <span style={s.secTitle}>Page Layout</span>
+            </div>
+            {layoutOpen && (
+              <div style={{ padding: '10px 8px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                  {Array.from({ length: MAX_BODY }, (_, i) => {
+                    const n = i + 1
+                    const bodySecs = selectedPage ? selectedPage.sections.filter(sec => sec.type === 'body') : []
+                    const isSel = n <= bodySecs.length && selectedSecId === bodySecs[i].id
+                    return (
+                      <div key={i}
+                        onClick={() => selectedPage && setSectionCount(n)}
+                        style={{ border: `1px solid ${isSel ? '#38bdf8' : '#e2e8f0'}`, borderRadius: 6,
+                          background: isSel ? '#e0f2fe' : '#fff', cursor: selectedPage ? 'pointer' : 'default',
+                          padding: '10px 6px', textAlign: 'center', userSelect: 'none' }}>
+                        <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1, marginBottom: 6, color: isSel ? '#0369a1' : '#475569' }}>{n}</div>
+                        <div style={{ fontSize: 11, color: isSel ? '#0369a1' : '#64748b' }}>{n > 1 ? 'Sections' : 'Section'}</div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
-            )
-          })}
-          <CreatePageBar onCreate={addPage} />
+            )}
+          </div>
+
+          {/* ── Components section ───────────────────────────────── */}
+          <div style={{ display: 'flex', flexDirection: 'column', flex: panelsOpen ? '1 1 0' : '0 0 auto', minHeight: 0 }}>
+            <div style={s.secHead} onClick={() => setPanelsOpen(o => !o)}>
+              <span style={{ fontSize: 9, color: '#94a3b8' }}>{panelsOpen ? '▼' : '▶'}</span>
+              <span style={s.secTitle}>Components</span>
+            </div>
+            {panelsOpen && (
+              <div style={{ ...s.leftScroll, flex: 1, overflowY: 'auto' }}>
+                <ComponentLibrary />
+              </div>
+            )}
+          </div>
+
+        </div>
+
+        {/* Main canvas */}
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
+
+          {/* View mode bar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', background: '#fff', borderBottom: '1px solid #e2e8f0', flexShrink: 0 }}>
+            <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, marginRight: 2 }}>View:</span>
+            {([['scroll', '≡ Scroll'], [1, '1 Page'], [2, '2 Pages'], [3, '3 Pages']] as const).map(([val, label]) => {
+              const active = val === 'scroll' ? viewMode === 'scroll' : viewMode === 'paged' && pagesPerView === val
+              return (
+                <button key={String(val)}
+                  onClick={() => { if (val === 'scroll') { setViewMode('scroll') } else { setViewMode('paged'); setPagesPerView(val) } }}
+                  style={{ padding: '3px 9px', borderRadius: 4, border: '1px solid', fontSize: 11, fontWeight: 500, cursor: 'pointer',
+                    borderColor: active ? '#38bdf8' : '#e2e8f0',
+                    background: active ? '#e0f2fe' : '#f8fafc',
+                    color: active ? '#0369a1' : '#475569' }}>
+                  {label}
+                </button>
+              )
+            })}
+            {viewMode === 'paged' && (
+              <>
+                <div style={{ flex: 1 }} />
+                {(() => {
+                  const idx = Math.max(0, pages.findIndex(p => p.id === selectedPageId))
+                  return (
+                    <>
+                      <button disabled={idx === 0}
+                        onClick={() => { const p = pages[idx - 1]; if (p) setSelectedPageId(p.id) }}
+                        style={{ padding: '3px 9px', borderRadius: 4, border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: 11, cursor: idx > 0 ? 'pointer' : 'default', opacity: idx > 0 ? 1 : 0.4 }}>
+                        ← Prev
+                      </button>
+                      <span style={{ fontSize: 11, color: '#64748b' }}>Page {idx + 1} / {pages.length}</span>
+                      <button disabled={idx >= pages.length - 1}
+                        onClick={() => { const p = pages[idx + 1]; if (p) setSelectedPageId(p.id) }}
+                        style={{ padding: '3px 9px', borderRadius: 4, border: '1px solid #e2e8f0', background: '#f8fafc', fontSize: 11, cursor: idx < pages.length - 1 ? 'pointer' : 'default', opacity: idx < pages.length - 1 ? 1 : 0.4 }}>
+                        Next →
+                      </button>
+                    </>
+                  )
+                })()}
+              </>
+            )}
+          </div>
+
+          {/* Scrollable canvas + zoom overlay */}
+          <div style={{ position: 'relative', flex: 1, overflow: 'hidden' }}>
+            <div ref={panelRef} style={{ height: '100%', overflow: 'auto', padding: viewMode === 'paged' && pagesPerView > 1 ? '20px 12px' : '28px 24px', background: '#e5e7eb' }}>
+              {(() => {
+                const pagedIdx = viewMode === 'paged' ? Math.max(0, pages.findIndex(p => p.id === selectedPageId)) : 0
+                const visiblePages = viewMode === 'paged' ? pages.slice(pagedIdx, pagedIdx + pagesPerView) : pages
+                const slotW = viewMode === 'paged' && pagesPerView > 1
+                  ? Math.floor((panelW - 16 * (pagesPerView - 1)) / pagesPerView)
+                  : panelW
+
+                const renderSheet = (page: Page, idx: number) => {
+                  const dims = page.orientation === 'landscape'
+                    ? { width: '297mm', height: '210mm' }
+                    : { width: '210mm', height: '297mm' }
+                  const sheetPx = (page.orientation === 'landscape' ? 297 : 210) * PX_PER_MM
+                  const effectiveW = viewMode === 'paged' && pagesPerView > 1 ? slotW : panelW
+                  const baseZoom = effectiveW > 0 ? Math.min(1, (effectiveW - 8) / sheetPx) : 1
+                  const zoom = baseZoom * zoomScale
+                  return (
+                    <div key={page.id} style={{ width: dims.width, ...(viewMode === 'scroll' ? { margin: '0 auto 28px' } : {}), zoom }}>
+                      <div style={s.pageLabel}>
+                        <span>Page {idx + 1} · A4 {page.orientation === 'landscape' ? 'Landscape' : 'Portrait'}</span>
+                        <button style={s.orientBtn}
+                          onClick={() => setPageOrientation(page.id, page.orientation === 'landscape' ? 'portrait' : 'landscape')}>
+                          ⟳ {page.orientation === 'landscape' ? 'Portrait' : 'Landscape'}
+                        </button>
+                      </div>
+                      <div id={`page-${page.id}`}
+                        onMouseDown={() => { if (selectedPageId !== page.id) { setSelectedPageId(page.id); setSelectedSecId(null) } }}
+                        style={{ ...s.sheet, ...dims, ...(selectedPageId === page.id ? s.sheetSel : {}) }}>
+                        {page.sections.map(sec => (
+                          <SectionBox key={sec.id} sec={sec} selected={selectedSecId === sec.id}
+                            grow={sec.type === 'body'}
+                            onChange={html => updateSection(page.id, sec.id, html)} />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                }
+
+                return viewMode === 'scroll' ? (
+                  <>
+                    {visiblePages.map((page, i) => renderSheet(page, i))}
+                    <CreatePageBar onCreate={addPage} />
+                  </>
+                ) : (
+                  <div style={{ display: 'flex', gap: 16, justifyContent: 'center', alignItems: 'flex-start' }}>
+                    {visiblePages.map((page, i) => renderSheet(page, pagedIdx + i))}
+                  </div>
+                )
+              })()}
+            </div>
+
+            {/* Zoom control — bottom-right overlay */}
+            <div style={{ position: 'absolute', bottom: 14, right: 16, zIndex: 50, display: 'flex', alignItems: 'center', gap: 4, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '4px 8px', boxShadow: '0 2px 8px rgba(0,0,0,.12)' }}>
+              <button onClick={() => setZoomScale(z => Math.max(0.25, +(z - 0.25).toFixed(2)))}
+                style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 14, lineHeight: 1, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+              <button onClick={() => setZoomScale(1.0)}
+                style={{ minWidth: 40, padding: '0 4px', height: 22, borderRadius: 4, border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 11, fontWeight: 600, color: '#475569' }}
+                title="Reset zoom">
+                {Math.round(zoomScale * 100)}%
+              </button>
+              <button onClick={() => setZoomScale(z => Math.min(3, +(z + 0.25).toFixed(2)))}
+                style={{ width: 22, height: 22, borderRadius: 4, border: '1px solid #e2e8f0', background: '#f8fafc', cursor: 'pointer', fontSize: 14, lineHeight: 1, color: '#475569', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>+</button>
+            </div>
+
+          </div>
+
         </div>
       </div>
 

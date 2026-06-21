@@ -8,6 +8,8 @@ __pycache__/
 backend/data/
 backend/uploads/
 backend/exports/
+*.log
+*.sqlite
 
 # Node / frontend
 frontend/node_modules/

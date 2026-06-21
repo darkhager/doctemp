@@ -1,4 +1,5 @@
 import { Routes, Route } from 'react-router-dom'
+import { ToastProvider } from './components/ui/Toast'
 import Layout from './components/Layout/Layout'
 import HomePage from './components/HomePage/HomePage'
 import TemplateLibrary from './components/TemplateLibrary/TemplateLibrary'
@@ -9,6 +10,7 @@ import DocumentEditorPage from './components/DocumentEditor/DocumentEditorPage'
 
 export default function App() {
   return (
+    <ToastProvider>
     <Layout>
       <Routes>
         <Route path="/" element={<HomePage />} />
@@ -21,5 +23,6 @@ export default function App() {
         <Route path="/documents/:id/edit" element={<DocumentEditorPage />} />
       </Routes>
     </Layout>
+    </ToastProvider>
   )
 }
