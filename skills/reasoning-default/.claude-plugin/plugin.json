@@ -1,0 +1,9 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "reasoning-default",
+  "version": "1.0.0",
+  "description": "Default reasoning skill using root-cause problem solving and evidence-based verification.",
+  "skills": [
+    "./"
+  ]
+}

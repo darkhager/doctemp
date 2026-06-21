@@ -1,0 +1,9 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "ponytail",
+  "version": "1.0.0",
+  "description": "Lazy senior developer mode - minimal, working solutions through the decision ladder.",
+  "skills": [
+    "./"
+  ]
+}
